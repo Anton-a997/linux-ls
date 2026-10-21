@@ -58,14 +58,19 @@ int fill_dir_entry_info(char const* file_path, char const* file_name, unsigned c
     struct group *gr;
 
     snprintf(entry_info->name, sizeof(entry_info->name), "%s", file_name);
-
-    if (file_type == 10 && /* symlink */
-        readlink(file_path, entry_info->lntarget, sizeof(entry_info->lntarget)) == -1) {
-            entry_info->lntarget[0] = 0;
-    }
+    entry_info->lntarget[0] = '\0';
 
     if (lstat(file_path, &file_stat) == -1) {
         return 1;
+    }
+
+    if (S_ISLNK(file_stat.st_mode)) {
+        ssize_t link_len = readlink(file_path, entry_info->lntarget, sizeof(entry_info->lntarget) - 1);
+        if (link_len >= 0) {
+            entry_info->lntarget[link_len] = '\0';
+        } else {
+            entry_info->lntarget[0] = '\0';
+        }
     }
 
     entry_info->nlink = file_stat.st_nlink;
