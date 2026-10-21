@@ -52,7 +52,7 @@ void free_entry_info_list(dir_entry_info *p_head) {
 
 /* Fills the dir_entry_info structure with information about the specified file
  */
-int fill_dir_entry_info(char const* file_path, char const* file_name, unsigned char file_type, dir_entry_info *entry_info) {
+int fill_dir_entry_info(char const* file_path, char const* file_name, dir_entry_info *entry_info) {
     struct stat file_stat;
     struct passwd *pw;
     struct group *gr;
@@ -76,7 +76,7 @@ int fill_dir_entry_info(char const* file_path, char const* file_name, unsigned c
     entry_info->nlink = file_stat.st_nlink;
     entry_info->blocks = file_stat.st_blocks;
     entry_info->size = file_stat.st_size;
-    str_file_mode(file_stat.st_mode, file_type, entry_info->mode);
+    str_file_mode(file_stat.st_mode, entry_info->mode);
     str_timespec(&(file_stat.st_mtim), entry_info->mtime, sizeof(entry_info->mtime));
     pw = getpwuid(file_stat.st_uid);
     gr = getgrgid(file_stat.st_gid);
@@ -136,7 +136,7 @@ dir_entry_info *get_entry_info_list(char const* path, int *max_name_len, size_t 
         if (written < 0 || (size_t)written >= sizeof(file_path)) {
             continue;
         }
-        fill_dir_entry_info(file_path, p_dir_entry->d_name, p_dir_entry->d_type, p_entry_info_tail);
+        fill_dir_entry_info(file_path, p_dir_entry->d_name, p_entry_info_tail);
 
         *total_blocks += p_entry_info_tail->blocks / 2;
     }

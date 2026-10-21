@@ -9,7 +9,7 @@
 
 /* Converts the mode_t value to a human-readable string like 'drwxrwxrwx'
  */
-void str_file_mode(mode_t mode, unsigned char type, char *str);
+void str_file_mode(mode_t mode, char *str);
 
 /* Converts the timespec value to a human-readable string
  */
