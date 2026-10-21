@@ -96,13 +96,16 @@ int fill_dir_entry_info(char const* file_path, char const* file_name, dir_entry_
  * and assigns the values of max_name_len and total_blocks.
  * The allocated memory must be freed with the function free_entry_info_list.
  */
-dir_entry_info *get_entry_info_list(char const* path, int *max_name_len, size_t *total_blocks) {
+dir_entry_info *get_entry_info_list(char const* path, int *max_name_len, size_t *total_blocks, int *error_occurred) {
     *max_name_len = 0;
     *total_blocks = 0;
+    *error_occurred = 0;
 
     DIR *p_dir_obj = opendir(path);
 
     if (!p_dir_obj) {
+        fprintf(stderr, "ls: cannot open directory '%s': %s\n", path, strerror(errno));
+        *error_occurred = 1;
         return NULL;
     }
 
@@ -110,7 +113,7 @@ dir_entry_info *get_entry_info_list(char const* path, int *max_name_len, size_t 
     size_t path_len = strlen(path);
     int needs_slash = (path_len > 0 && path[path_len - 1] != '/');
 
-    dir_entry_info entry_info_head = {NULL}; /* empty list */
+    dir_entry_info entry_info_head = {0};
     dir_entry_info *p_entry_info_tail = &entry_info_head;
     struct dirent *p_dir_entry;
 
@@ -125,6 +128,7 @@ dir_entry_info *get_entry_info_list(char const* path, int *max_name_len, size_t 
         if ((p_entry_info_tail = alloc_next_entry_info(p_entry_info_tail)) == NULL) {
             free_entry_info_list(entry_info_head.next);
             entry_info_head.next = NULL;
+            *error_occurred = 1;
             break;
         }
 
@@ -136,9 +140,12 @@ dir_entry_info *get_entry_info_list(char const* path, int *max_name_len, size_t 
         if (written < 0 || (size_t)written >= sizeof(file_path)) {
             continue;
         }
-        fill_dir_entry_info(file_path, p_dir_entry->d_name, p_entry_info_tail);
-
-        *total_blocks += p_entry_info_tail->blocks / 2;
+        if (fill_dir_entry_info(file_path, p_dir_entry->d_name, p_entry_info_tail) != 0) {
+            fprintf(stderr, "ls: cannot access '%s': %s\n", file_path, strerror(errno));
+            *error_occurred = 1;
+        } else {
+            *total_blocks += p_entry_info_tail->blocks / 2;
+        }
     }
 
     closedir(p_dir_obj);
@@ -152,21 +159,20 @@ int list_dir(char const* path, int long_listing_format) {
     size_t total_blocks;
     int max_name_len;
     int col_count;
+    int error_occurred = 0;
 
-    dir_entry_info *entry_list_head = get_entry_info_list(path, &max_name_len, &total_blocks);
+    dir_entry_info *entry_list_head = get_entry_info_list(path, &max_name_len, &total_blocks, &error_occurred);
 
-    /* Output the "Total" header even for an empty directory */
-    if (long_listing_format && !errno) {
+    if (error_occurred && entry_list_head == NULL) {
+        return 1;
+    }
+
+    if (long_listing_format) {
         printf("Total: %lu\n", total_blocks);
     }
 
     if (entry_list_head == NULL) {
-        if (errno) {
-            perror(NULL);
-        }
-
-        /* errno == 0 and entry_list_head == NULL if a directory is empty */
-        return errno ? 1 : 0;
+        return error_occurred ? 1 : 0;
     }
 
     /* For pretty output */
@@ -212,7 +218,7 @@ int list_dir(char const* path, int long_listing_format) {
     }
 
     free_entry_info_list(entry_list_head);
-    return 0;
+    return error_occurred ? 1 : 0;
 }
 
 /* Prints help
