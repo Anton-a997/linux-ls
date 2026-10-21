@@ -1,3 +1,5 @@
+#include <stdlib.h>
+
 #include "helpers.h"
 
 /* Converts the mode_t value to a human-readable string like 'drwxrwxrwx'
@@ -66,16 +68,26 @@ int str_timespec(struct timespec const *ts, char *str, size_t len) {
 /* Returns the number of columns of a given width that can fit in the terminal
  */
 int get_columns_count(unsigned column_width) {
+    if (column_width == 0) {
+        return 1;
+    }
+
     struct winsize ws;
-    int terminal_width;
+    int terminal_width = 0;
 
-    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) != 0) {
-        terminal_width = 0;
-    }
-    else {
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0) {
         terminal_width = ws.ws_col;
+    } else {
+        char const *col_env = getenv("COLUMNS");
+        if (col_env) {
+            terminal_width = atoi(col_env);
+        }
     }
 
-    int columns_count = terminal_width / column_width;
-    return columns_count ? columns_count : 1;
+    if (terminal_width <= 0) {
+        return 1;
+    }
+
+    int columns_count = terminal_width / (int)column_width;
+    return columns_count > 0 ? columns_count : 1;
 }
