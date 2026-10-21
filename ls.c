@@ -12,36 +12,40 @@
 
 #include "helpers.h"
 
-/* Contains the necessary information about the files
- */
 typedef struct _dir_entry_info {
     struct _dir_entry_info *next;
     char name[256];
-    char lntarget[4096]; /* target path if file is symlink */
+    char lntarget[4096];
     char mode[12];
     char user[32];
     char group[32];
-    char mtime[32]; /* last modification time */
-    nlink_t nlink; /* link count */
+    char mtime[32];
+    nlink_t nlink;
     blkcnt_t blocks;
     off_t size;
 } dir_entry_info;
 
-/* Allocates new memory for struct dir_entry_info and inserts it after p_entry_info
+/**
+ * @brief Allocates a new dir_entry_info node and inserts it after a given node.
+ *
+ * @param p_entry_info Node after which the newly allocated node will be inserted.
+ * @return Pointer to the allocated node, or NULL on allocation failure.
  */
 dir_entry_info *alloc_next_entry_info(dir_entry_info *p_entry_info) {
     dir_entry_info *tmp = calloc(1, sizeof(dir_entry_info));
+    if (!tmp) {
+        return NULL;
+    }
 
-	if (!tmp) {
-		return NULL; /* calloc failed */
-	}
-
-	tmp->next = p_entry_info->next;
-	p_entry_info->next = tmp;
+    tmp->next = p_entry_info->next;
+    p_entry_info->next = tmp;
     return tmp;
 }
 
-/* Goes through the list and frees memory
+/**
+ * @brief Deallocates all nodes in a linked list of dir_entry_info structures.
+ *
+ * @param p_head Pointer to the head of the list to free.
  */
 void free_entry_info_list(dir_entry_info *p_head) {
     while (p_head) {
@@ -51,7 +55,12 @@ void free_entry_info_list(dir_entry_info *p_head) {
     }
 }
 
-/* Merges two sorted dir_entry_info lists
+/**
+ * @brief Merges two lexicographically sorted dir_entry_info linked lists.
+ *
+ * @param a First sorted list.
+ * @param b Second sorted list.
+ * @return Head pointer of the merged sorted list.
  */
 static dir_entry_info *merge_sorted_entries(dir_entry_info *a, dir_entry_info *b) {
     dir_entry_info dummy = {0};
@@ -71,7 +80,11 @@ static dir_entry_info *merge_sorted_entries(dir_entry_info *a, dir_entry_info *b
     return dummy.next;
 }
 
-/* Sorts a dir_entry_info list alphabetically using merge sort
+/**
+ * @brief Sorts a dir_entry_info linked list alphabetically using merge sort.
+ *
+ * @param head Head pointer of the list to sort.
+ * @return Head pointer of the sorted list.
  */
 static dir_entry_info *sort_entry_list(dir_entry_info *head) {
     if (!head || !head->next) {
@@ -92,9 +105,15 @@ static dir_entry_info *sort_entry_list(dir_entry_info *head) {
     return merge_sorted_entries(sort_entry_list(head), sort_entry_list(mid));
 }
 
-/* Fills the dir_entry_info structure with information about the specified file
+/**
+ * @brief Populates a dir_entry_info structure with metadata for a given file.
+ *
+ * @param file_path Path to the target file.
+ * @param file_name Display name of the file.
+ * @param entry_info Pointer to the entry structure to populate.
+ * @return 0 on success, non-zero if lstat fails.
  */
-int fill_dir_entry_info(char const* file_path, char const* file_name, dir_entry_info *entry_info) {
+int fill_dir_entry_info(const char *file_path, const char *file_name, dir_entry_info *entry_info) {
     struct stat file_stat;
     struct passwd *pw;
     struct group *gr;
@@ -138,17 +157,21 @@ int fill_dir_entry_info(char const* file_path, char const* file_name, dir_entry_
     return 0;
 }
 
-/* Returns a pointer to the beginning of the dir_entry_info list, which contains information about files,
- * and assigns the values of max_name_len and total_blocks.
- * The allocated memory must be freed with the function free_entry_info_list.
+/**
+ * @brief Reads directory contents and returns a sorted linked list of entry records.
+ *
+ * @param path Directory path to open and read.
+ * @param max_name_len Out-parameter receiving the maximum filename length encountered.
+ * @param total_blocks Out-parameter receiving total 1024-byte block count.
+ * @param error_occurred Out-parameter set to 1 if an error occurred during directory processing.
+ * @return Sorted linked list of directory entries, or NULL if empty or on error.
  */
-dir_entry_info *get_entry_info_list(char const* path, int *max_name_len, blkcnt_t *total_blocks, int *error_occurred) {
+dir_entry_info *get_entry_info_list(const char *path, int *max_name_len, blkcnt_t *total_blocks, int *error_occurred) {
     *max_name_len = 0;
     *total_blocks = 0;
     *error_occurred = 0;
 
     DIR *p_dir_obj = opendir(path);
-
     if (!p_dir_obj) {
         fprintf(stderr, "ls: cannot open directory '%s': %s\n", path, strerror(errno));
         *error_occurred = 1;
@@ -168,9 +191,9 @@ dir_entry_info *get_entry_info_list(char const* path, int *max_name_len, blkcnt_
     while ((p_dir_entry = readdir(p_dir_obj)) != NULL) {
         if (strcmp(p_dir_entry->d_name, ".") == 0 ||
             strcmp(p_dir_entry->d_name, "..") == 0) {
-                continue;
+            continue;
         }
-        
+
         if ((p_entry_info_tail = alloc_next_entry_info(p_entry_info_tail)) == NULL) {
             free_entry_info_list(entry_info_head.next);
             entry_info_head.next = NULL;
@@ -178,7 +201,7 @@ dir_entry_info *get_entry_info_list(char const* path, int *max_name_len, blkcnt_
             break;
         }
 
-        name_len = strlen(p_dir_entry->d_name);
+        name_len = (int)strlen(p_dir_entry->d_name);
         *max_name_len = name_len > *max_name_len ? name_len : *max_name_len;
 
         int written = snprintf(file_path, sizeof(file_path), "%s%s%s",
@@ -198,17 +221,20 @@ dir_entry_info *get_entry_info_list(char const* path, int *max_name_len, blkcnt_
     return sort_entry_list(entry_info_head.next);
 }
 
-/* Prints a single entry in long listing format
+/**
+ * @brief Prints a single entry in detailed long listing format.
+ *
+ * @param entry Pointer to the entry structure to display.
  */
-static void print_long_entry(dir_entry_info const *entry) {
+static void print_long_entry(const dir_entry_info *entry) {
     printf("%10s %10lu %10s %10s %10lld %s %s",
-        entry->mode,
-        (unsigned long)entry->nlink,
-        entry->user,
-        entry->group,
-        (long long)entry->size,
-        entry->mtime,
-        entry->name);
+           entry->mode,
+           (unsigned long)entry->nlink,
+           entry->user,
+           entry->group,
+           (long long)entry->size,
+           entry->mtime,
+           entry->name);
 
     if (entry->lntarget[0]) {
         printf(" -> %s", entry->lntarget);
@@ -216,7 +242,12 @@ static void print_long_entry(dir_entry_info const *entry) {
     printf("\n");
 }
 
-/* Prints a list of entries in either multi-column or long format
+/**
+ * @brief Prints a list of file entries in either multi-column or long format.
+ *
+ * @param entry_list_head Head of the entry list to display.
+ * @param max_name_len Maximum filename length for column alignment.
+ * @param long_listing_format Non-zero for long listing format, 0 for multi-column.
  */
 static void print_entry_list(dir_entry_info *entry_list_head, int max_name_len, int long_listing_format) {
     int col_count = 1;
@@ -237,7 +268,6 @@ static void print_entry_list(dir_entry_info *entry_list_head, int max_name_len, 
                 printf("\n");
             }
         }
-
         entry_list_cur = entry_list_cur->next;
     }
 
@@ -246,10 +276,14 @@ static void print_entry_list(dir_entry_info *entry_list_head, int max_name_len, 
     }
 }
 
-/* Lists the entries in the specified directory.
- * long_listing_format - the -l argument was passed
+/**
+ * @brief Lists all entries within a directory.
+ *
+ * @param path Directory path to list.
+ * @param long_listing_format Non-zero for long listing format, 0 for multi-column.
+ * @return 0 on success, non-zero on error.
  */
-int list_dir(char const* path, int long_listing_format) {
+int list_dir(const char *path, int long_listing_format) {
     blkcnt_t total_blocks;
     int max_name_len;
     int error_occurred = 0;
@@ -273,16 +307,22 @@ int list_dir(char const* path, int long_listing_format) {
     return error_occurred ? 1 : 0;
 }
 
-/* Prints help
+/**
+ * @brief Prints command-line usage information to stderr.
  */
 void help(void) {
     fprintf(stderr, "Usage: ./ls [-l] [FILE...]\n\n");
     fprintf(stderr, "  -l - use a long listing format\n\n");
 }
 
-/* Parses arguments
+/**
+ * @brief Application entry point; parses flags and lists specified files/directories.
+ *
+ * @param argc Argument count.
+ * @param argv Argument vectors.
+ * @return 0 on complete success, non-zero if errors occurred.
  */
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
     setlocale(LC_ALL, "");
     tzset();
 
@@ -291,13 +331,11 @@ int main(int argc, char* argv[]) {
 
     opterr = 0;
 
-    /* Parse arguments */
     while ((optchar = getopt(argc, argv, "l")) != -1) {
         switch (optchar) {
         case 'l':
             long_listing_format = 1;
             break;
-        
         default:
             help();
             exit(1);
@@ -315,7 +353,7 @@ int main(int argc, char* argv[]) {
     int max_file_name_len = 0;
 
     int dir_count = 0;
-    char const **dirs = malloc((size_t)(argc - optind) * sizeof(char const *));
+    const char **dirs = malloc((size_t)(argc - optind) * sizeof(const char *));
     if (!dirs) {
         perror("malloc");
         return 1;
