@@ -51,6 +51,47 @@ void free_entry_info_list(dir_entry_info *p_head) {
     }
 }
 
+/* Merges two sorted dir_entry_info lists
+ */
+static dir_entry_info *merge_sorted_entries(dir_entry_info *a, dir_entry_info *b) {
+    dir_entry_info dummy = {0};
+    dir_entry_info *tail = &dummy;
+
+    while (a && b) {
+        if (strcoll(a->name, b->name) <= 0) {
+            tail->next = a;
+            a = a->next;
+        } else {
+            tail->next = b;
+            b = b->next;
+        }
+        tail = tail->next;
+    }
+    tail->next = a ? a : b;
+    return dummy.next;
+}
+
+/* Sorts a dir_entry_info list alphabetically using merge sort
+ */
+static dir_entry_info *sort_entry_list(dir_entry_info *head) {
+    if (!head || !head->next) {
+        return head;
+    }
+
+    dir_entry_info *slow = head;
+    dir_entry_info *fast = head->next;
+
+    while (fast && fast->next) {
+        slow = slow->next;
+        fast = fast->next->next;
+    }
+
+    dir_entry_info *mid = slow->next;
+    slow->next = NULL;
+
+    return merge_sorted_entries(sort_entry_list(head), sort_entry_list(mid));
+}
+
 /* Fills the dir_entry_info structure with information about the specified file
  */
 int fill_dir_entry_info(char const* file_path, char const* file_name, dir_entry_info *entry_info) {
@@ -154,7 +195,7 @@ dir_entry_info *get_entry_info_list(char const* path, int *max_name_len, blkcnt_
     }
 
     closedir(p_dir_obj);
-    return entry_info_head.next;
+    return sort_entry_list(entry_info_head.next);
 }
 
 /* Lists the entries in the specified directory.
