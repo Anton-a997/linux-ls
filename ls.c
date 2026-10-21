@@ -57,7 +57,7 @@ int fill_dir_entry_info(char const* file_path, char const* file_name, unsigned c
     struct passwd *pw;
     struct group *gr;
 
-    strcpy(entry_info->name, file_name);
+    snprintf(entry_info->name, sizeof(entry_info->name), "%s", file_name);
 
     if (file_type == 10 && /* symlink */
         readlink(file_path, entry_info->lntarget, sizeof(entry_info->lntarget)) == -1) {
@@ -77,11 +77,11 @@ int fill_dir_entry_info(char const* file_path, char const* file_name, unsigned c
     gr = getgrgid(file_stat.st_gid);
 
     if (pw) {
-        strcpy(entry_info->user, pw->pw_name);
+        snprintf(entry_info->user, sizeof(entry_info->user), "%s", pw->pw_name);
     }
 
     if (gr) {
-        strcpy(entry_info->group, gr->gr_name);
+        snprintf(entry_info->group, sizeof(entry_info->group), "%s", gr->gr_name);
     }
 
     return 0;
@@ -102,8 +102,8 @@ dir_entry_info *get_entry_info_list(char const* path, int *max_name_len, size_t 
     }
 
     char file_path[4096];
-    int path_len = strlen(path) + 1;
-    snprintf(file_path, sizeof(file_path), "%s/", path);
+    size_t path_len = strlen(path);
+    int needs_slash = (path_len > 0 && path[path_len - 1] != '/');
 
     dir_entry_info entry_info_head = {NULL}; /* empty list */
     dir_entry_info *p_entry_info_tail = &entry_info_head;
@@ -126,8 +126,12 @@ dir_entry_info *get_entry_info_list(char const* path, int *max_name_len, size_t 
         name_len = strlen(p_dir_entry->d_name);
         *max_name_len = name_len > *max_name_len ? name_len : *max_name_len;
 
-        snprintf(file_path + path_len, sizeof(file_path) - path_len, "%s", p_dir_entry->d_name);
-        fill_dir_entry_info(file_path, file_path + path_len, p_dir_entry->d_type, p_entry_info_tail);
+        int written = snprintf(file_path, sizeof(file_path), "%s%s%s",
+                               path, needs_slash ? "/" : "", p_dir_entry->d_name);
+        if (written < 0 || (size_t)written >= sizeof(file_path)) {
+            continue;
+        }
+        fill_dir_entry_info(file_path, p_dir_entry->d_name, p_dir_entry->d_type, p_entry_info_tail);
 
         *total_blocks += p_entry_info_tail->blocks / 2;
     }
