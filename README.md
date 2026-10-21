@@ -1,7 +1,7 @@
 # linux-ls
 Simple implementation of the **ls** Linux utility
 
-Usage: **./ls [-l] [DIR]**
+Usage: **./ls [-l] [FILE...]**
 
 **-l** - use a long listing format
 

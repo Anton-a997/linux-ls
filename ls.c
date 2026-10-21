@@ -198,13 +198,60 @@ dir_entry_info *get_entry_info_list(char const* path, int *max_name_len, blkcnt_
     return sort_entry_list(entry_info_head.next);
 }
 
+/* Prints a single entry in long listing format
+ */
+static void print_long_entry(dir_entry_info const *entry) {
+    printf("%10s %10lu %10s %10s %10lld %s %s",
+        entry->mode,
+        (unsigned long)entry->nlink,
+        entry->user,
+        entry->group,
+        (long long)entry->size,
+        entry->mtime,
+        entry->name);
+
+    if (entry->lntarget[0]) {
+        printf(" -> %s", entry->lntarget);
+    }
+    printf("\n");
+}
+
+/* Prints a list of entries in either multi-column or long format
+ */
+static void print_entry_list(dir_entry_info *entry_list_head, int max_name_len, int long_listing_format) {
+    int col_count = 1;
+    if (!long_listing_format) {
+        col_count = get_columns_count((unsigned int)(max_name_len + 3));
+    }
+
+    dir_entry_info *entry_list_cur = entry_list_head;
+    int i = 0;
+
+    while (entry_list_cur) {
+        if (long_listing_format) {
+            print_long_entry(entry_list_cur);
+        } else {
+            printf("%-*s", max_name_len + 3, entry_list_cur->name);
+
+            if (++i % col_count == 0) {
+                printf("\n");
+            }
+        }
+
+        entry_list_cur = entry_list_cur->next;
+    }
+
+    if (!long_listing_format && i % col_count) {
+        printf("\n");
+    }
+}
+
 /* Lists the entries in the specified directory.
  * long_listing_format - the -l argument was passed
  */
 int list_dir(char const* path, int long_listing_format) {
     blkcnt_t total_blocks;
     int max_name_len;
-    int col_count;
     int error_occurred = 0;
 
     dir_entry_info *entry_list_head = get_entry_info_list(path, &max_name_len, &total_blocks, &error_occurred);
@@ -221,57 +268,16 @@ int list_dir(char const* path, int long_listing_format) {
         return error_occurred ? 1 : 0;
     }
 
-    /* For pretty output */
-    if (!long_listing_format) {
-        col_count = get_columns_count(max_name_len + 3);
-    }
-
-    dir_entry_info *entry_list_cur = entry_list_head;
-    int i = 0;
-
-    while (entry_list_cur) {
-        /* The -l argument was passed */
-        if (long_listing_format) {
-            printf("%10s %10lu %10s %10s %10lld %s %s",
-                entry_list_cur->mode,
-                (unsigned long)entry_list_cur->nlink,
-                entry_list_cur->user,
-                entry_list_cur->group,
-                (long long)entry_list_cur->size,
-                entry_list_cur->mtime,
-                entry_list_cur->name);
-
-                if (entry_list_cur->lntarget[0]) { /* if is symlink */
-                    printf(" -> %s", entry_list_cur->lntarget);
-                }
-
-                printf("\n");
-        }
-        /* Output in columns */
-        else {
-            printf("%-*s", max_name_len + 3, entry_list_cur->name);
-
-            if (++i % col_count == 0) {
-                printf("\n");
-            }
-        }
-
-        entry_list_cur = entry_list_cur->next;
-    }
-
-    if (!long_listing_format && i % col_count) {
-        printf("\n");
-    }
-
+    print_entry_list(entry_list_head, max_name_len, long_listing_format);
     free_entry_info_list(entry_list_head);
     return error_occurred ? 1 : 0;
 }
 
 /* Prints help
  */
-void help() {
-    printf("Usage: ./ls [-l] [FILE]\n\n");
-    printf("  -l - use a long listing format\n\n");
+void help(void) {
+    fprintf(stderr, "Usage: ./ls [-l] [FILE...]\n\n");
+    fprintf(stderr, "  -l - use a long listing format\n\n");
 }
 
 /* Parses arguments
@@ -299,19 +305,63 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    int ret = 0;
+    if (optind >= argc) {
+        return list_dir(".", long_listing_format);
+    }
 
-    /* The rest of the arguments are directories */
-    if (optind < argc) {
-        while (optind < argc) {
-            printf("%s:\n", argv[optind]);
-            ret |= list_dir(argv[optind++], long_listing_format);
-            printf("\n");
+    int ret = 0;
+    dir_entry_info file_head = {0};
+    dir_entry_info *file_tail = &file_head;
+    int max_file_name_len = 0;
+
+    int dir_count = 0;
+    char const **dirs = malloc((size_t)(argc - optind) * sizeof(char const *));
+    if (!dirs) {
+        perror("malloc");
+        return 1;
+    }
+
+    for (int i = optind; i < argc; i++) {
+        struct stat st;
+        if (lstat(argv[i], &st) == -1) {
+            fprintf(stderr, "ls: cannot access '%s': %s\n", argv[i], strerror(errno));
+            ret = 1;
+            continue;
+        }
+
+        if (S_ISDIR(st.st_mode)) {
+            dirs[dir_count++] = argv[i];
+        } else {
+            dir_entry_info *node = alloc_next_entry_info(file_tail);
+            if (node) {
+                if (fill_dir_entry_info(argv[i], argv[i], node) == 0) {
+                    int len = (int)strlen(argv[i]);
+                    if (len > max_file_name_len) {
+                        max_file_name_len = len;
+                    }
+                    file_tail = node;
+                }
+            }
         }
     }
-    else {
-        ret = list_dir(".", long_listing_format);
+
+    int has_files = (file_head.next != NULL);
+    if (has_files) {
+        dir_entry_info *sorted_files = sort_entry_list(file_head.next);
+        print_entry_list(sorted_files, max_file_name_len, long_listing_format);
+        free_entry_info_list(sorted_files);
     }
-    
+
+    for (int i = 0; i < dir_count; i++) {
+        if (has_files || i > 0) {
+            printf("\n");
+        }
+        if (dir_count > 1 || has_files) {
+            printf("%s:\n", dirs[i]);
+        }
+        ret |= list_dir(dirs[i], long_listing_format);
+    }
+
+    free(dirs);
     return ret;
 }
