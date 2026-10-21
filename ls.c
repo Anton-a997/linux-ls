@@ -23,7 +23,7 @@ typedef struct _dir_entry_info {
     char mtime[32]; /* last modification time */
     nlink_t nlink; /* link count */
     blkcnt_t blocks;
-    size_t size;
+    off_t size;
 } dir_entry_info;
 
 /* Allocates new memory for struct dir_entry_info and inserts it after p_entry_info
@@ -83,10 +83,14 @@ int fill_dir_entry_info(char const* file_path, char const* file_name, dir_entry_
 
     if (pw) {
         snprintf(entry_info->user, sizeof(entry_info->user), "%s", pw->pw_name);
+    } else {
+        snprintf(entry_info->user, sizeof(entry_info->user), "%u", (unsigned int)file_stat.st_uid);
     }
 
     if (gr) {
         snprintf(entry_info->group, sizeof(entry_info->group), "%s", gr->gr_name);
+    } else {
+        snprintf(entry_info->group, sizeof(entry_info->group), "%u", (unsigned int)file_stat.st_gid);
     }
 
     return 0;
@@ -96,7 +100,7 @@ int fill_dir_entry_info(char const* file_path, char const* file_name, dir_entry_
  * and assigns the values of max_name_len and total_blocks.
  * The allocated memory must be freed with the function free_entry_info_list.
  */
-dir_entry_info *get_entry_info_list(char const* path, int *max_name_len, size_t *total_blocks, int *error_occurred) {
+dir_entry_info *get_entry_info_list(char const* path, int *max_name_len, blkcnt_t *total_blocks, int *error_occurred) {
     *max_name_len = 0;
     *total_blocks = 0;
     *error_occurred = 0;
@@ -156,7 +160,7 @@ dir_entry_info *get_entry_info_list(char const* path, int *max_name_len, size_t 
  * long_listing_format - the -l argument was passed
  */
 int list_dir(char const* path, int long_listing_format) {
-    size_t total_blocks;
+    blkcnt_t total_blocks;
     int max_name_len;
     int col_count;
     int error_occurred = 0;
@@ -168,7 +172,7 @@ int list_dir(char const* path, int long_listing_format) {
     }
 
     if (long_listing_format) {
-        printf("Total: %lu\n", total_blocks);
+        printf("Total: %lu\n", (unsigned long)total_blocks);
     }
 
     if (entry_list_head == NULL) {
@@ -186,12 +190,12 @@ int list_dir(char const* path, int long_listing_format) {
     while (entry_list_cur) {
         /* The -l argument was passed */
         if (long_listing_format) {
-            printf("%10s %10lu %10s %10s %10lu%20s %s",
+            printf("%10s %10lu %10s %10s %10lld %s %s",
                 entry_list_cur->mode,
-                entry_list_cur->nlink,
+                (unsigned long)entry_list_cur->nlink,
                 entry_list_cur->user,
                 entry_list_cur->group,
-                entry_list_cur->size,
+                (long long)entry_list_cur->size,
                 entry_list_cur->mtime,
                 entry_list_cur->name);
 
