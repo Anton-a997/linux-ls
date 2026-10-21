@@ -52,7 +52,6 @@ void str_file_mode(mode_t mode, char *str) {
  */
 int str_timespec(struct timespec const *ts, char *str, size_t len) {
     struct tm t;
-    tzset();
 
     if (localtime_r(&(ts->tv_sec), &t) == NULL) {
         return 1;

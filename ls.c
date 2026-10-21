@@ -2,6 +2,7 @@
 #include <errno.h>
 #include <getopt.h>
 #include <grp.h>
+#include <locale.h>
 #include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -235,6 +236,9 @@ void help() {
 /* Parses arguments
  */
 int main(int argc, char* argv[]) {
+    setlocale(LC_ALL, "");
+    tzset();
+
     int long_listing_format = 0;
     int optchar;
 
