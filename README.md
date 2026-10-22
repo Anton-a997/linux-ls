@@ -5,4 +5,4 @@ Usage: **./ls [-l] [FILE...]**
 
 **-l** - use a long listing format
 
-![image](https://user-images.githubusercontent.com/88583217/203837671-d0451abd-38fd-4dab-b103-1ffbbcca6808.png)
+![image](<img width="776" height="513" alt="ls" src="https://github.com/user-attachments/assets/8561a3e3-0c7d-4534-a5d5-4a3e2d7392e3" />)
